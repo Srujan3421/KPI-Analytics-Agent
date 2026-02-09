@@ -5,21 +5,21 @@ This repository contains a blueprint for building an automated **KPI Agent**. Th
 ## 🚀 Objective
 
 To build an intelligent system that automates the "Data Analyst" workflow:
-1.  **Ingest & Clean**: Handle raw CSVs from S3.
+1.  **Ingest & Clean**: Handle raw CSVs with automated cleaning.
 2.  **Classify**: Determine the business domain (e.g., E-commerce, Finance).
 3.  **Generate KPIs**: Create industry-standard metrics.
 4.  **Visualize**: Select top cards and generate data points for charts.
 5.  **Analyze**: Provide text-based insights for each KPI.
-6.  **Persist**: Store everything in MongoDB for retrieval by the Frontend.
+6.  **Persist**: Store analysis results in MySQL for audit and retrieval.
 
 ## 🛠 Tech Stack
 
 -   **Language**: Python 3.10+
--   **LLM Orchestration**: [Groq](https://groq.com/) (Llama3-70b, Mistral, etc.).
--   **Data Processing**: Pandas, [PandasAI](https://github.com/gventuri/pandas-ai).
--   **Database**: MySQL.
--   **Frontend**: Streamlit.
--   **Testing**: Pytest.
+-   **LLM Provider**: [Groq](https://groq.com/) (Llama 3.3-70b-versatile)
+-   **Data Processing**: Pandas
+-   **Database**: MySQL
+-   **Frontend**: Streamlit with in-memory session state
+-   **Testing**: Pytest
 
 ## 📂 Repository Structure
 
@@ -37,10 +37,10 @@ KPI-Agent-Blueprint/
 │   │   ├── ingestion.py    # Data Loading & Cleaning
 │   │   ├── classifier.py   # Domain Classification (LLM)
 │   │   ├── composer.py     # KPI Generation (LLM)
-│   │   ├── card_selector.py# Top 3 Card Selection (LLM)
-│   │   ├── data_engine.py  # Data extraction (PandasAI)
+│   │   ├── card_selector.py# Top KPI Selection (LLM)
+│   │   ├── data_engine.py  # Data extraction (Pandas)
 │   │   ├── analytics.py    # Descriptive Text (LLM)
-│   │   └── persistence.py  # MongoDB Storage
+│   │   └── persistence.py  # MySQL Storage
 │   ├── llm/                # LLM Integration
 │   │   ├── client.py       # Wrapper for Groq
 │   │   └── prompts.py      # System Prompts
@@ -97,11 +97,47 @@ pytest tests/
 
 ## 🏗 Architecture & Flow
 
-1.  **Ingestion**: `DataIngestionService` loads CSV, cleans headers, parses dates.
-2.  **Domain Classification**: `DomainClassifier` sends a data sample to Llama3 to detect the business context.
-3.  **KPI Generation**: `KPIComposer` lists potential metrics based on columns and domain.
-4.  **Card Selection**: `CardSelector` picks the top 3 most relevant KPIs.
-5.  **Data Extraction**: `DataPointEngine` uses PandasAI to calculate the actual values/trends for the selected KPIs.
-6.  **Analysis**: `DescriptiveAnalytics` looks at the trend data and writes a summary.
-7.  **Persistence**: `PersistenceLayer` saves the entire JSON object to MySQL.
-8.  **UI**: Streamlit reads from Mongo (or direct pipeline output) to display the Dashboard.
+### Pipeline Overview
+
+1.  **Ingestion**: `DataIngestionService` loads CSV from file upload or URL, normalizes column names to snake_case
+2.  **Cleaning**: `DataCleaningService` handles missing values, duplicates, and outliers with configurable imputation strategies
+3.  **Domain Classification**: `DomainClassifier` sends a data sample to Groq LLM (Llama 3.3-70b-versatile) to detect business context
+4.  **KPI Generation**: `KPIComposer` generates potential metrics based on detected domain and available columns
+5.  **Card Selection**: `CardSelector` uses LLM to select the top relevant KPIs
+6.  **Data Extraction**: `DataPointEngine` calculates actual values/trends for the selected KPIs using Pandas aggregations
+7.  **Analysis**: `DescriptiveAnalytics` generates business insights (currently disabled for performance optimization)
+8.  **Persistence**: `PersistenceLayer` saves the complete analysis result as JSON to MySQL database
+9.  **UI**: Streamlit dashboard operates in-memory using session state
+
+### Flow Diagram
+
+```mermaid
+flowchart TD
+    A[User Uploads CSV] --> B[DataIngestionService]
+    B --> C[DataCleaningService]
+    C --> D[DomainClassifier]
+    D -->|Groq LLM| E[KPIComposer]
+    E -->|Groq LLM| F[CardSelector]
+    F --> G[DataPointEngine]
+    G -->|Pandas Aggregations| H[Session Result]
+    H --> I[PersistenceLayer]
+    I --> J[(MySQL Database)]
+    H --> K[Streamlit Session State]
+    K --> L[Interactive Dashboard]
+    
+    style J fill:#ff9,stroke:#333
+    style L fill:#9f9,stroke:#333
+```
+
+### Streamlit UI Architecture
+
+The UI provides 6 interactive pages, all operating on **in-memory data**:
+
+1. **Upload**: File upload with initial data preview
+2. **Preview**: Detailed dataset statistics and sample view  
+3. **Cleaning**: Configure imputation strategies and apply data cleaning
+4. **Dashboard**: Auto-generated KPI visualizations (bar/line/pie/scatter charts)
+5. **Insights**: AI-generated business insights and recommendations
+6. **Chat with Data**: Interactive Q&A interface for data exploration
+
+**Note**: All data transformations and analysis results are stored in session state. Database persistence is a background operation for audit/recovery purposes.
